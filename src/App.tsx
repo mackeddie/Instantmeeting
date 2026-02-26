@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Video, Users, Sparkles, ArrowRight, Code, Layout, ScreenShare, Radio, Globe, Zap, Heart, Mic, Shield, BarChart3, Cloud } from 'lucide-react';
+import { Video, Users, Sparkles, ArrowRight, Code, Layout, ScreenShare, Radio, Globe, Zap, Heart, Mic, Shield, BarChart3, Cloud, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import VideoRoom from './VideoRoom';
 
@@ -9,6 +9,12 @@ function App() {
   const [passcode, setPasscode] = useState('');
   const [step, setStep] = useState<'landing' | 'lobby' | 'room'>('landing');
   const [recentMeetings, setRecentMeetings] = useState<any[]>([]);
+
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     try {
@@ -79,6 +85,8 @@ function App() {
         roomName={roomName}
         userName={userName}
         passcode={passcode}
+        theme={theme}
+        setTheme={setTheme}
         onExit={(summary, transcript) => {
           if (summary || transcript) {
             saveToHistory(roomName, summary || "", transcript || "");
@@ -95,15 +103,15 @@ function App() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-premium p-12 w-full max-w-lg rounded-[2.5rem]"
+          className="glass-premium p-8 md:p-12 w-full max-w-lg rounded-[2rem] md:rounded-[2.5rem]"
         >
-          <div className="flex items-center space-x-6 mb-12">
-            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/20 text-white">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6 mb-8 md:mb-12 text-center sm:text-left">
+            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/20 text-white shrink-0">
               <Users className="w-8 h-8" />
             </div>
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-white">Complete Profile</h2>
-              <p className="text-slate-400 font-medium">Joining room <span className="text-indigo-400">{roomName}</span></p>
+              <h2 className="text-2xl md:text-3xl font-bold tracking-tight text-white leading-tight">Complete Profile</h2>
+              <p className="text-slate-400 font-medium text-sm">Joining room <span className="text-indigo-400">{roomName}</span></p>
             </div>
           </div>
 
@@ -154,7 +162,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] selection:bg-indigo-500/30 overflow-x-hidden flex flex-col">
+    <div className="min-h-screen bg-transparent selection:bg-indigo-500/30 overflow-x-hidden flex flex-col transition-colors duration-300">
       <div className="mesh-gradient absolute inset-0 opacity-60 pointer-events-none" />
 
       {/* Navigation */}
@@ -165,13 +173,21 @@ function App() {
           </div>
           <span className="text-2xl font-black tracking-tight text-white">InstantMeet</span>
         </div>
-        <div className="hidden lg:flex items-center space-x-12 text-xs font-black uppercase tracking-[0.15em] text-slate-500">
-          <button onClick={() => scrollToSection('features')} className="hover:text-white transition-all">Features</button>
-          <button onClick={() => scrollToSection('solutions')} className="hover:text-white transition-all">Solutions</button>
-          <button onClick={() => scrollToSection('enterprise')} className="hover:text-white transition-all">Security</button>
+        <div className="flex items-center space-x-4 md:space-x-8">
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/5 text-slate-400 hover:bg-white/10 transition-all"
+          >
+            {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
+          </button>
+          <div className="hidden lg:flex items-center space-x-12 text-xs font-black uppercase tracking-[0.15em] text-slate-500">
+            <button onClick={() => scrollToSection('features')} className="hover:text-white transition-all">Features</button>
+            <button onClick={() => scrollToSection('solutions')} className="hover:text-white transition-all">Solutions</button>
+            <button onClick={() => scrollToSection('enterprise')} className="hover:text-white transition-all">Security</button>
+          </div>
           <button
             onClick={() => scrollToSection('hero-action', 'room-input')}
-            className="px-10 py-3.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl border border-indigo-500/20 transition-all font-black text-[10px] uppercase tracking-widest"
+            className="hidden sm:block px-6 md:px-10 py-3.5 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl border border-indigo-500/20 transition-all font-black text-[10px] uppercase tracking-widest"
           >
             Start Meeting
           </button>

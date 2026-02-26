@@ -13,16 +13,18 @@ export function usePresence(roomName: string, userName: string) {
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [channel, setChannel] = useState<RealtimeChannel | null>(null);
     const [sessionId] = useState(() => Math.random().toString(36).substring(7));
+    const [identity, setIdentity] = useState(`${userName}:${sessionId}`);
 
     useEffect(() => {
         if (!roomName || !userName) return;
-        const identity = `${userName}:${sessionId}`;
-        console.log(`[Presence] Initializing channel for: ${roomName} as ${identity}`);
+        const currentIdentity = `${userName}:${sessionId}`;
+        setIdentity(currentIdentity);
+        console.log(`[Presence] Initializing channel for: ${roomName} as ${currentIdentity}`);
 
         const roomChannel = supabase.channel(`room:${roomName}`, {
             config: {
                 presence: {
-                    key: identity,
+                    key: currentIdentity,
                 },
             },
         });
@@ -81,5 +83,5 @@ export function usePresence(roomName: string, userName: string) {
         };
     }, [roomName, userName, sessionId]);
 
-    return { participants, channel };
+    return { participants, channel, identity };
 }
