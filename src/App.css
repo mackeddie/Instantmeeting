@@ -1,0 +1,6 @@
+/* Cleared to avoid conflicts with Tailwind layout */
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}

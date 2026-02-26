@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#4f46e5" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>InstantMeet | Professional Video Conferencing</title>
+  <script>
+    window.global = window;
+    window.process = {
+      env: { DEBUG: undefined },
+      version: '',
+      nextTick: (cb) => setTimeout(cb, 0),
+      on: () => { },
+      once: () => { },
+      off: () => { },
+      emit: () => { },
+    };
+
+    // Basic EventEmitter shim for simple-peer
+    window.EventEmitter = function () {
+      this.listeners = {};
+    };
+    window.EventEmitter.prototype.on = function (event, cb) {
+      if (!this.listeners[event]) this.listeners[event] = [];
+      this.listeners[event].push(cb);
+      return this;
+    };
+    window.EventEmitter.prototype.emit = function (event, ...args) {
+      if (this.listeners[event]) {
+        this.listeners[event].forEach(cb => cb(...args));
+      }
+      return this;
+    };
+    window.EventEmitter.prototype.removeListener = function (event, cb) {
+      if (this.listeners[event]) {
+        this.listeners[event] = this.listeners[event].filter(l => l !== cb);
+      }
+      return this;
+    };
+
+    // Module shims for vite externalization
+    window.require = function (module) {
+      if (module === 'events') return { EventEmitter: window.EventEmitter };
+      if (module === 'util') return { debuglog: () => () => { }, inspect: () => { } };
+      return {};
+    };
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js');
+      });
+    }
+  </script>
+</body>
+
+</html>
