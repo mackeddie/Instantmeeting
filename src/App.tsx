@@ -170,27 +170,26 @@ function App() {
         </div>
       </nav>
 
-      <main className="relative pt-24">
+      <main className="flex-grow pt-32 overflow-x-hidden">
         {/* Hero Section */}
-        <section id="home" className="relative min-h-[90vh] flex items-center px-10 max-w-7xl mx-auto">
-          <div className="hero-glow" />
-          <div className="grid lg:grid-cols-12 gap-20 items-center w-full">
+        <section id="home" className="min-h-[90vh] flex items-center relative px-6 md:px-10 overflow-hidden">
+          <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-12 md:gap-24 relative z-10">
             <motion.div
-              initial={{ opacity: 0, x: -50 }}
+              initial={{ opacity: 0, x: -30 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-              className="lg:col-span-7 space-y-12"
+              transition={{ duration: 0.8 }}
+              className="lg:col-span-7 space-y-10 md:space-y-12 py-10"
             >
               <div className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-[10px] font-black uppercase tracking-[0.2em]">
                 <Shield className="w-4 h-4 mr-2" />
                 Enterprise-Grade Video Architecture
               </div>
-              <h1 className="text-7xl md:text-9xl font-black leading-[0.85] tracking-tighter text-white">
+              <h1 className="text-5xl md:text-9xl font-black leading-[0.85] tracking-tighter text-white">
                 Simple. <br />
                 Silent. <br />
                 <span className="gradient-text">Standard.</span>
               </h1>
-              <p className="text-xl text-slate-400 max-w-xl leading-relaxed font-medium">
+              <p className="text-lg md:text-xl text-slate-400 max-w-xl leading-relaxed font-medium">
                 The world standard for high-stakes professional meetings. <span className="text-white border-b border-indigo-500/50">Zero lag. No logins.</span> Experience real-time AI transcription and 4K screen sharing.
               </p>
 
@@ -319,13 +318,13 @@ function App() {
         </section>
 
         {/* Features Section */}
-        <section id="features" className="py-48 relative px-10">
+        <section id="features" className="py-24 md:py-48 relative px-6 md:px-10">
           <div className="max-w-7xl mx-auto">
-            <div className="flex flex-col md:flex-row justify-between items-end mb-32 gap-10">
+            <div className="flex flex-col md:flex-row justify-between items-end mb-16 md:mb-32 gap-10">
               <div className="max-w-2xl">
                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-indigo-600 mb-6 block">The Tech Stack</span>
-                <h2 className="text-6xl font-black mb-10 leading-[0.9] tracking-tighter text-white">Built for <br /><span className="gradient-text">Elite Reliability.</span></h2>
-                <p className="text-slate-500 text-xl font-medium leading-relaxed">Engineered with a focus on privacy and high-fidelity data transmission. No middlemen, no data collection, just raw connectivity.</p>
+                <h2 className="text-4xl md:text-6xl font-black mb-6 md:mb-10 leading-[0.9] tracking-tighter text-white">Built for <br /><span className="gradient-text">Elite Reliability.</span></h2>
+                <p className="text-slate-500 text-lg md:text-xl font-medium leading-relaxed">Engineered with a focus on privacy and high-fidelity data transmission. No middlemen, no data collection, just raw connectivity.</p>
               </div>
               <div className="pb-4">
                 <button onClick={() => scrollToSection('hero-action')} className="p-4 bg-white/5 border border-white/5 rounded-full hover:bg-white/10 transition-all">
@@ -358,9 +357,9 @@ function App() {
         </section>
 
         {/* Solutions Section */}
-        <section id="solutions" className="py-48 bg-slate-900/10 border-y border-white/[0.03] px-10 relative overflow-hidden">
+        <section id="solutions" className="py-24 md:py-48 bg-slate-900/10 border-y border-white/[0.03] px-6 md:px-10 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-indigo-600/5 blur-[150px] rounded-full" />
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-24">
+          <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center gap-16 md:gap-24">
             <div className="flex-1 space-y-16">
               <h2 className="text-6xl font-black tracking-tighter leading-[0.9] text-white">Universal <br />Compatibility.</h2>
               <div className="space-y-12">
@@ -382,11 +381,11 @@ function App() {
               </div>
             </div>
             <div className="flex-1 relative w-full">
-              <div className="glass-premium p-20 rounded-[4rem] text-center border-white/[0.03] relative z-10">
-                <div className="w-24 h-24 bg-indigo-600 rounded-[2.5rem] mx-auto mb-12 flex items-center justify-center shadow-[0_20px_50px_rgba(79,70,229,0.3)] transform hover:rotate-12 transition-all">
-                  <Heart className="w-11 h-11 text-white fill-current" />
+              <div className="glass-premium p-8 md:p-20 rounded-[3rem] md:rounded-[4rem] text-center border-white/[0.03] relative z-10">
+                <div className="w-16 h-16 md:w-24 md:h-24 bg-indigo-600 rounded-[2rem] md:rounded-[2.5rem] mx-auto mb-8 md:mb-12 flex items-center justify-center shadow-[0_20px_50px_rgba(79,70,229,0.3)] transform hover:rotate-12 transition-all">
+                  <Heart className="w-8 h-8 md:w-11 md:h-11 text-white fill-current" />
                 </div>
-                <h3 className="text-4xl font-black mb-6 text-white tracking-tighter">Ready to Deploy?</h3>
+                <h3 className="text-3xl md:text-4xl font-black mb-6 text-white tracking-tighter">Ready to Deploy?</h3>
                 <p className="text-slate-500 mb-12 font-medium tracking-wide leading-relaxed">Join the world's most innovative teams today. <br />Free forever for individuals.</p>
                 <button
                   onClick={() => scrollToSection('home')}
@@ -402,11 +401,11 @@ function App() {
         </section>
 
         {/* Enterprise Section */}
-        <section id="enterprise" className="py-48 px-10 text-center max-w-5xl mx-auto">
-          <div className="p-24 glass-premium rounded-[5rem] border-indigo-500/10 relative overflow-hidden group">
+        <section id="enterprise" className="py-24 md:py-48 px-6 md:px-10 text-center max-w-5xl mx-auto">
+          <div className="p-10 md:p-24 glass-premium rounded-[3rem] md:rounded-[5rem] border-indigo-500/10 relative overflow-hidden group">
             <div className="absolute inset-0 bg-indigo-600/[0.01] group-hover:bg-indigo-600/[0.03] transition-colors" />
-            <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-8 py-2.5 bg-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-[0.3em] text-white shadow-2xl shadow-indigo-600/40">Infrastructure Integrity</div>
-            <h2 className="text-5xl font-black mb-12 tracking-tighter text-white leading-tight">Trusted by global <br />infrastructure partners.</h2>
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 px-6 py-2.5 bg-indigo-600 rounded-lg text-[10px] font-black uppercase tracking-[0.3em] text-white shadow-2xl shadow-indigo-600/40">Infrastructure Integrity</div>
+            <h2 className="text-3xl md:text-5xl font-black mb-8 md:mb-12 tracking-tighter text-white leading-tight">Trusted by global <br />infrastructure partners.</h2>
             <div className="flex flex-wrap justify-center gap-16 opacity-20 grayscale hover:grayscale-0 transition-all duration-1000">
               {['TECHCO', 'VORTEX', 'SYNAPSE', 'CORE', 'APEX'].map(name => (
                 <span key={name} className="text-3xl font-black tracking-[0.2em]">{name}</span>

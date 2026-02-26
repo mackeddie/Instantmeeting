@@ -38,9 +38,9 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const [videoQuality, setVideoQuality] = useState<'720p' | '1080p' | '4k'>('1080p');
     const [selectedCamera, setSelectedCamera] = useState("");
     const [selectedMic, setSelectedMic] = useState("");
-    const [isLocked, setIsLocked] = useState(!!passcode);
-    const [inputPasscode, setInputPasscode] = useState("");
     const [passcodeError, setPasscodeError] = useState(false);
+    const [blurBackground, setBlurBackground] = useState(false);
+    const [sidebarVisibleOnMobile, setSidebarVisibleOnMobile] = useState(false);
 
     const recorderRef = useRef<MeetingRecorder | null>(null);
     const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -475,9 +475,19 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                                     autoPlay
                                                     muted
                                                     playsInline
-                                                    className="w-full h-full object-cover mirror"
+                                                    className={`w-full h-full object-cover mirror transition-all duration-700 ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`}
                                                     ref={localVideoRef}
                                                 />
+                                                {blurBackground && (
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-md">
+                                                        <div className="text-center space-y-4">
+                                                            <div className="w-24 h-24 bg-indigo-600/20 rounded-full flex items-center justify-center mx-auto border border-indigo-500/30">
+                                                                <Shield className="w-10 h-10 text-indigo-400" />
+                                                            </div>
+                                                            <p className="text-indigo-400 font-black uppercase tracking-[0.3em] text-[10px]">Privacy Mode Active</p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
                                                 <p className="z-20 absolute bottom-4 left-4 font-medium flex items-center">
                                                     You {isMuted && <MicOff className="w-3 h-3 ml-2 text-red-400" />}
@@ -569,12 +579,12 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
 
                 {/* Sidebar */}
                 <AnimatePresence>
-                    {showAI && (
+                    {(showAI || sidebarVisibleOnMobile) && (
                         <motion.aside
-                            initial={{ x: 400 }}
+                            initial={{ x: '100%' }}
                             animate={{ x: 0 }}
-                            exit={{ x: 400 }}
-                            className="w-96 border-l border-white/5 bg-slate-900/80 backdrop-blur-2xl flex flex-col"
+                            exit={{ x: '100%' }}
+                            className="fixed inset-y-0 right-0 w-full sm:w-80 md:w-96 md:relative border-l border-white/5 bg-[#020617]/95 md:bg-slate-900/80 backdrop-blur-2xl flex flex-col z-[100] md:z-auto"
                         >
                             <div className="flex border-b border-white/5">
                                 <button
@@ -788,7 +798,14 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                         onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))}
                         className="px-6 py-3 bg-red-600 hover:bg-red-500 rounded-xl font-bold flex items-center transition-all active:scale-95 text-sm"
                     >
-                        End Meeting <LogOut className="ml-2 w-4 h-4" />
+                        <span className="hidden sm:inline mr-2">End</span> <LogOut className="w-4 h-4" />
+                    </button>
+
+                    <button
+                        onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)}
+                        className={`md:hidden w-12 h-12 rounded-2xl flex items-center justify-center transition-all ${sidebarVisibleOnMobile ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-400'}`}
+                    >
+                        <Users className="w-5 h-5" />
                     </button>
                 </div>
 
@@ -885,14 +902,22 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                     <section>
                                         <h3 className="text-xs font-black uppercase tracking-widest text-slate-500 mb-4">Pro Features</h3>
                                         <div className="space-y-3">
-                                            <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl">
-                                                <div className="flex items-center space-x-3">
-                                                    <Sparkles className="w-4 h-4 text-indigo-400" />
-                                                    <span className="text-sm font-medium">Background Blur</span>
+                                            <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5">
+                                                <div className="flex items-center space-x-4">
+                                                    <div className="p-3 bg-indigo-600/10 rounded-xl">
+                                                        <Sparkles className="w-5 h-5 text-indigo-400" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-bold text-sm">Blur Background</p>
+                                                        <p className="text-[10px] text-slate-500 font-medium font-black uppercase">Privacy focus</p>
+                                                    </div>
                                                 </div>
-                                                <div className="w-10 h-6 bg-slate-800 rounded-full relative p-1 cursor-pointer">
-                                                    <div className="w-4 h-4 bg-slate-500 rounded-full" />
-                                                </div>
+                                                <button
+                                                    onClick={() => setBlurBackground(!blurBackground)}
+                                                    className={`w-14 h-8 rounded-full transition-all relative ${blurBackground ? 'bg-indigo-600' : 'bg-slate-800'}`}
+                                                >
+                                                    <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${blurBackground ? 'left-7' : 'left-1'}`} />
+                                                </button>
                                             </div>
                                             <div className="flex items-center justify-between p-4 bg-white/5 border border-white/10 rounded-xl">
                                                 <div className="flex items-center space-x-3">

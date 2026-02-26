@@ -12,15 +12,17 @@ export interface Participant {
 export function usePresence(roomName: string, userName: string) {
     const [participants, setParticipants] = useState<Participant[]>([]);
     const [channel, setChannel] = useState<RealtimeChannel | null>(null);
+    const [sessionId] = useState(() => Math.random().toString(36).substring(7));
 
     useEffect(() => {
         if (!roomName || !userName) return;
-        console.log(`[Presence] Initializing channel for: ${roomName} as ${userName}`);
+        const identity = `${userName}:${sessionId}`;
+        console.log(`[Presence] Initializing channel for: ${roomName} as ${identity}`);
 
         const roomChannel = supabase.channel(`room:${roomName}`, {
             config: {
                 presence: {
-                    key: userName,
+                    key: identity,
                 },
             },
         });
@@ -32,9 +34,10 @@ export function usePresence(roomName: string, userName: string) {
 
                 const formattedParticipants: Participant[] = Object.keys(state).map((key) => {
                     const presence = state[key][0] as any;
+                    const [name] = key.split(':');
                     return {
                         id: key,
-                        name: key,
+                        name: name || key,
                         status: 'connected',
                         isHost: presence?.isHost || false,
                     };
@@ -76,7 +79,7 @@ export function usePresence(roomName: string, userName: string) {
             console.log('[Presence] Cleaning up channel');
             roomChannel.unsubscribe();
         };
-    }, [roomName, userName]);
+    }, [roomName, userName, sessionId]);
 
     return { participants, channel };
 }
