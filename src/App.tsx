@@ -11,9 +11,13 @@ function App() {
   const [recentMeetings, setRecentMeetings] = useState<any[]>([]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('instantmeet_history');
-    if (saved) {
-      setRecentMeetings(JSON.parse(saved));
+    try {
+      const saved = localStorage.getItem('instantmeet_history');
+      if (saved) {
+        setRecentMeetings(JSON.parse(saved));
+      }
+    } catch (e) {
+      console.error("Failed to parse history", e);
     }
   }, []);
 
@@ -25,9 +29,13 @@ function App() {
       summary,
       transcript
     };
-    const updated = [meeting, ...recentMeetings].slice(0, 5);
-    setRecentMeetings(updated);
-    localStorage.setItem('instantmeet_history', JSON.stringify(updated));
+    try {
+      const updated = [meeting, ...recentMeetings].slice(0, 5);
+      setRecentMeetings(updated);
+      localStorage.setItem('instantmeet_history', JSON.stringify(updated));
+    } catch (e) {
+      console.error("Failed to save history", e);
+    }
   };
 
   useEffect(() => {
@@ -146,7 +154,7 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020617] selection:bg-indigo-500/30 overflow-x-hidden">
+    <div className="min-h-screen bg-[#020617] selection:bg-indigo-500/30 overflow-x-hidden flex flex-col">
       <div className="mesh-gradient absolute inset-0 opacity-60 pointer-events-none" />
 
       {/* Navigation */}
