@@ -43,6 +43,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const [passcodeError, setPasscodeError] = useState(false);
     const [blurBackground, setBlurBackground] = useState(false);
     const [sidebarVisibleOnMobile, setSidebarVisibleOnMobile] = useState(false);
+    const [meetingSeconds, setMeetingSeconds] = useState(0);
+
+    useEffect(() => {
+        const interval = setInterval(() => setMeetingSeconds(s => s + 1), 1000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const formatDuration = (secs: number) => {
+        const h = Math.floor(secs / 3600);
+        const m = Math.floor((secs % 3600) / 60);
+        const s = secs % 60;
+        if (h > 0) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    };
 
     const recorderRef = useRef<MeetingRecorder | null>(null);
     const screenVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -280,7 +294,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
 
                 <AnimatePresence>
                     {showAI && (
-                        <motion.aside initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }} className={`fixed inset-y-0 right-0 w-full sm:w-80 md:w-96 md:relative border-l border-white/5 bg-[#020617]/95 md:bg-slate-900/80 backdrop-blur-2xl flex flex-col z-[100] md:z-auto transition-all ${sidebarVisibleOnMobile || !sidebarVisibleOnMobile && 'hidden md:flex'}`}>
+                        <motion.aside initial={{ x: 400, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 400, opacity: 0 }} className={`fixed inset-y-0 right-0 w-full sm:w-80 md:w-96 md:relative border-l border-white/5 bg-[#020617]/95 md:bg-slate-900/80 backdrop-blur-2xl flex flex-col z-[100] md:z-auto transition-all ${sidebarVisibleOnMobile ? 'flex' : 'hidden md:flex'}`}>
                             <div className="h-16 flex items-center justify-between px-6 border-b border-white/5">
                                 <div className="flex space-x-4">
                                     {(['ai', 'participants', 'chat'] as const).map(tab => (
@@ -334,7 +348,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                     <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 text-slate-400">
                         {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
                     </button>
-                    <div className="flex flex-col"><p className="text-[10px] text-slate-500 font-bold uppercase">Duration</p><p className="font-mono text-xl text-purple-400">00:42:15</p></div>
+                    <div className="flex flex-col"><p className="text-[10px] text-slate-500 font-bold uppercase">Duration</p><p className="font-mono text-xl text-purple-400">{formatDuration(meetingSeconds)}</p></div>
                 </div>
                 <div className="flex items-center justify-center space-x-2 md:space-x-4 flex-1 md:flex-none">
                     <button onClick={() => setIsMuted(!isMuted)} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}</button>
