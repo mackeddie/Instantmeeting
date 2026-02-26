@@ -8,4 +8,17 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  build: {
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'framer-motion', 'lucide-react'],
+          supabase: ['@supabase/supabase-js'],
+          deepgram: ['@deepgram/sdk'],
+          openai: ['openai']
+        }
+      }
+    }
+  }
 })
