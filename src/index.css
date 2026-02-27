@@ -114,3 +114,41 @@ body {
 [data-theme="light"] .border-white\/10 {
   border-color: rgba(0, 0, 0, 0.05);
 }
+
+/* ── Mobile / responsive fixes ─────────────────────────────── */
+
+/* Ensure the root and body don't overflow on mobile */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+/* Video grid cells must not overflow their allocated space */
+.auto-rows-fr>* {
+  min-height: 0;
+  min-width: 0;
+}
+
+/* video elements fill their containers properly */
+video {
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+/* Safe area inset for iOS home indicator / notch */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* On very small screens, hide the horizontal scroll */
+@media (max-width: 480px) {
+  .xs\:inline {
+    display: inline;
+  }
+}

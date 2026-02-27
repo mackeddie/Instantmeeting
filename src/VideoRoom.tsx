@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     Mic, MicOff, Video, VideoOff, ScreenShare,
     Hand, MessageSquare, Sparkles, X,
@@ -12,6 +12,26 @@ import { MeetingRecorder } from './utils/MeetingRecorder';
 import { usePresence } from './hooks/usePresence';
 import { useSignaling } from './hooks/useSignaling';
 import { useAI } from './hooks/useAI';
+
+/** Stable video ref helper – avoids resetting srcObject on every render */
+function useVideoRef(stream: MediaStream | null) {
+    const ref = useRef<HTMLVideoElement | null>(null);
+    const setRef = useCallback((el: HTMLVideoElement | null) => {
+        ref.current = el;
+        if (el && stream) {
+            el.srcObject = stream;
+            el.play().catch(() => { });
+        }
+    }, [stream]);
+    // Also update srcObject if the stream object changes after mount
+    useEffect(() => {
+        if (ref.current && stream) {
+            ref.current.srcObject = stream;
+            ref.current.play().catch(() => { });
+        }
+    }, [stream]);
+    return setRef;
+}
 
 interface VideoRoomProps {
     roomName: string;
@@ -59,7 +79,6 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     };
 
     const recorderRef = useRef<MeetingRecorder | null>(null);
-    const screenVideoRef = useRef<HTMLVideoElement | null>(null);
 
     const [myId] = useState(userName);
     const { participants: liveParticipants, channel, identity } = usePresence(roomName, myId);
@@ -69,19 +88,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
 
     const { transcript, summary } = useAI(localStream);
 
+    // Stable video refs — no more srcObject reset on every re-render (camera shake fix)
+    const localVideoRef = useVideoRef(localStream);
+    const screenVideoRef = useVideoRef(screenStream);
+
     const toggleScreenShare = async () => {
         if (!screenStream) {
             try {
                 const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-                setScreenStream(stream);
-                if (screenVideoRef.current) {
-                    screenVideoRef.current.srcObject = stream;
-                }
+                setScreenStream(stream); // useVideoRef will auto-assign srcObject
                 stream.getVideoTracks()[0].onended = () => {
                     setScreenStream(null);
                 };
             } catch (err) {
-                console.error("Error sharing screen:", err);
+                console.error('Error sharing screen:', err);
             }
         } else {
             screenStream.getTracks().forEach(track => track.stop());
@@ -252,42 +272,74 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                 </div>
             </header>
 
-            <main className="flex-1 flex overflow-hidden relative">
-                <div className="flex-1 flex flex-col relative overflow-hidden">
+            <main className="flex-1 flex overflow-hidden relative min-h-0">
+                <div className="flex-1 flex flex-col relative overflow-hidden min-h-0">
                     <AnimatePresence mode="wait">
                         {activeView === 'video' ? (
-                            <motion.div key="video" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className={`grid gap-2 md:gap-6 h-full p-2 md:p-6 ${Object.keys(remoteStreams).length === 0 ? 'grid-cols-1' : Object.keys(remoteStreams).length === 1 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-2 lg:grid-cols-3'}`}>
-                                {screenStream ? (
-                                    <div className="col-span-full bg-slate-900 rounded-[2rem] border border-white/5 overflow-hidden shadow-2xl relative group">
-                                        <video autoPlay playsInline className="w-full h-full object-contain" ref={(el) => { if (el) el.srcObject = screenStream; }} />
+                            <motion.div
+                                key="video"
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.95 }}
+                                className={`grid gap-2 md:gap-4 h-full p-2 md:p-4 auto-rows-fr ${Object.keys(remoteStreams).length === 0
+                                    ? 'grid-cols-1'
+                                    : Object.keys(remoteStreams).length === 1
+                                        ? 'grid-cols-1 sm:grid-cols-2'
+                                        : Object.keys(remoteStreams).length <= 3
+                                            ? 'grid-cols-2'
+                                            : 'grid-cols-2 lg:grid-cols-3'
+                                    }`}
+                            >
+                                {/* Screen share tile — spans full width when active */}
+                                {screenStream && (
+                                    <div className="col-span-full bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" style={{ maxHeight: '55%' }}>
+                                        <video ref={screenVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
                                     </div>
-                                ) : (
-                                    Object.entries(remoteStreams).map(([peerId, stream]) => (
-                                        <motion.div key={peerId} className="bg-slate-900 rounded-[2rem] border border-white/5 overflow-hidden shadow-2xl relative group">
-                                            <video autoPlay playsInline className="w-full h-full object-cover" ref={(el) => { if (el) { el.srcObject = stream; el.onloadedmetadata = () => el.play().catch(console.error); } }} />
-                                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10" />
-                                            <p className="z-20 absolute bottom-4 left-4 font-medium flex items-center text-sm">
-                                                <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 shadow-lg shadow-emerald-500/50" />
-                                                {liveParticipants.find(part => part.id === peerId)?.name || peerId.split(':')[0]}
-                                            </p>
-                                        </motion.div>
-                                    ))
                                 )}
-                                <motion.div className={`relative bg-slate-950 rounded-[2rem] border-2 border-indigo-600/30 overflow-hidden shadow-2xl group ${Object.keys(remoteStreams).length === 0 ? 'col-span-full max-w-4xl mx-auto w-full aspect-video' : ''}`}>
-                                    <video ref={(el) => { if (el) { el.srcObject = localStream; el.onloadedmetadata = () => el.play().catch(console.error); } }} autoPlay muted playsInline className={`w-full h-full object-cover mirror transition-all duration-700 ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`} />
-                                    {isVideoOff && <div className="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center space-y-6"><VideoOff className="w-10 h-10 text-indigo-500" /></div>}
-                                    <div className="absolute bottom-4 right-4 z-20 flex space-x-2"><div className={`p-2 rounded-lg bg-slate-950/80 backdrop-blur-md border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</div></div>
+
+                                {/* Remote participant tiles */}
+                                {Object.entries(remoteStreams).map(([peerId, stream]) => (
+                                    <RemoteTile
+                                        key={peerId}
+                                        peerId={peerId}
+                                        stream={stream}
+                                        label={liveParticipants.find(p => p.id === peerId)?.name || peerId.split(':')[0]}
+                                    />
+                                ))}
+
+                                {/* Local self tile */}
+                                <motion.div className={`relative bg-slate-950 rounded-2xl border-2 border-indigo-600/30 overflow-hidden shadow-2xl ${Object.keys(remoteStreams).length === 0 && !screenStream ? 'col-span-full max-w-2xl w-full mx-auto' : ''
+                                    }`}>
+                                    <video
+                                        ref={localVideoRef}
+                                        autoPlay
+                                        muted
+                                        playsInline
+                                        className={`w-full h-full object-cover mirror transition-all duration-700 ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`}
+                                    />
+                                    {isVideoOff && (
+                                        <div className="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center">
+                                            <VideoOff className="w-10 h-10 text-indigo-500" />
+                                        </div>
+                                    )}
+                                    <div className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-20">
+                                        <div className={`p-1.5 md:p-2 rounded-lg bg-slate-950/80 backdrop-blur-md border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'
+                                            }`}>
+                                            {isMuted ? <MicOff className="w-3 h-3 md:w-4 md:h-4" /> : <Mic className="w-3 h-3 md:w-4 md:h-4" />}
+                                        </div>
+                                    </div>
+                                    <p className="absolute bottom-2 left-2 md:bottom-4 md:left-4 text-[10px] md:text-xs font-bold text-white/70 z-20">You</p>
                                 </motion.div>
                             </motion.div>
                         ) : (
-                            <motion.div key="whiteboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full h-full p-6">
+                            <motion.div key="whiteboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full h-full p-3 md:p-6">
                                 <Whiteboard />
                             </motion.div>
                         )}
                     </AnimatePresence>
-                    <div className="absolute bottom-0 left-0 right-0 h-[600px] pointer-events-none z-40 overflow-hidden">
+                    <div className="absolute bottom-0 left-0 right-0 h-[400px] pointer-events-none z-40 overflow-hidden">
                         {reactions.map(r => (
-                            <motion.div key={r.id} initial={{ y: 600, x: `${r.x}%`, opacity: 0, scale: 0.5 }} animate={{ y: -100, opacity: [0, 1, 1, 0], scale: [0.5, 1.2, 1.5, 1] }} transition={{ duration: 4 }} className="absolute text-5xl">{r.emoji}</motion.div>
+                            <motion.div key={r.id} initial={{ y: 400, x: `${r.x}%`, opacity: 0, scale: 0.5 }} animate={{ y: -100, opacity: [0, 1, 1, 0], scale: [0.5, 1.2, 1.5, 1] }} transition={{ duration: 4 }} className="absolute text-4xl md:text-5xl">{r.emoji}</motion.div>
                         ))}
                     </div>
                 </div>
@@ -343,23 +395,26 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                 </AnimatePresence>
             </main>
 
-            <footer className="h-20 md:h-24 px-4 md:px-10 flex justify-between items-center border-t border-white/5 bg-slate-950/80 backdrop-blur-2xl z-20 pb-safe">
+            <footer className="shrink-0 px-3 md:px-10 flex justify-between items-center border-t border-white/5 bg-slate-950/80 backdrop-blur-2xl z-20" style={{ minHeight: '64px', paddingBottom: 'env(safe-area-inset-bottom, 8px)', paddingTop: '8px' }}>
                 <div className="flex-1 hidden md:flex items-center space-x-4">
                     <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 text-slate-400">
                         {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
                     </button>
-                    <div className="flex flex-col"><p className="text-[10px] text-slate-500 font-bold uppercase">Duration</p><p className="font-mono text-xl text-purple-400">{formatDuration(meetingSeconds)}</p></div>
+                    <div className="flex flex-col">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase">Duration</p>
+                        <p className="font-mono text-lg text-purple-400">{formatDuration(meetingSeconds)}</p>
+                    </div>
                 </div>
-                <div className="flex items-center justify-center space-x-2 md:space-x-4 flex-1 md:flex-none">
-                    <button onClick={() => setIsMuted(!isMuted)} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}</button>
-                    <button onClick={() => setIsVideoOff(!isVideoOff)} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}</button>
-                    <button onClick={toggleScreenShare} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${screenStream ? 'bg-purple-600' : 'bg-white/5'}`}><ScreenShare className="w-5 h-5" /></button>
-                    <button onClick={toggleRecording} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${isRecording ? 'bg-red-600' : 'bg-white/5'}`}><Radio className="w-5 h-5" /></button>
-                    <button onClick={() => { setHandRaised(!handRaised); if (channel) channel.send({ type: 'broadcast', event: 'handRaised', payload: { userId: myId, userName: myId, raised: !handRaised } }); }} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${handRaised ? 'bg-yellow-500' : 'bg-white/5'}`}><Hand className="w-5 h-5" /></button>
-                    <button onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); }} className="w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center bg-white/5"><MessageSquare className="w-5 h-5" /></button>
-                    <button onClick={() => setShowAI(!showAI)} className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center ${showAI ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-5 h-5" /></button>
-                    <button onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-4 py-2 bg-red-600 rounded-xl text-[10px] font-black uppercase flex items-center"><LogOut className="w-4 h-4 mr-2" /> End</button>
-                    <button onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-10 h-10 rounded-xl flex items-center justify-center ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Users className="w-5 h-5" /></button>
+                <div className="flex items-center justify-center gap-1.5 md:gap-3 flex-1 md:flex-none flex-wrap">
+                    <button id="btn-mute" onClick={() => setIsMuted(!isMuted)} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
+                    <button id="btn-video" onClick={() => setIsVideoOff(!isVideoOff)} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}</button>
+                    <button id="btn-screen" onClick={toggleScreenShare} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${screenStream ? 'bg-purple-600' : 'bg-white/5'}`}><ScreenShare className="w-4 h-4" /></button>
+                    <button id="btn-record" onClick={toggleRecording} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isRecording ? 'bg-red-600' : 'bg-white/5'}`}><Radio className="w-4 h-4" /></button>
+                    <button id="btn-hand" onClick={() => { setHandRaised(!handRaised); if (channel) channel.send({ type: 'broadcast', event: 'handRaised', payload: { userId: myId, userName: myId, raised: !handRaised } }); }} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${handRaised ? 'bg-yellow-500' : 'bg-white/5'}`}><Hand className="w-4 h-4" /></button>
+                    <button id="btn-chat" onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); }} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center bg-white/5 shrink-0"><MessageSquare className="w-4 h-4" /></button>
+                    <button id="btn-ai" onClick={() => setShowAI(!showAI)} className={`hidden md:flex w-9 h-9 md:w-11 md:h-11 rounded-xl items-center justify-center shrink-0 ${showAI ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-4 h-4" /></button>
+                    <button id="btn-end" onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-3 py-2 bg-red-600 rounded-xl text-[9px] md:text-[10px] font-black uppercase flex items-center shrink-0"><LogOut className="w-3.5 h-3.5 mr-1 md:mr-2" /><span className="hidden xs:inline">End</span></button>
+                    <button id="btn-sidebar-mobile" onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Users className="w-4 h-4" /></button>
                 </div>
                 <div className="hidden lg:block">
                     <button onClick={() => setShowSettings(true)} className="p-3 bg-white/5 rounded-xl"><Layout className="w-5 h-5" /></button>
@@ -392,5 +447,20 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
         </div>
     );
 };
+
+/** Stable remote video tile — uses its own useVideoRef so srcObject never flickers */
+function RemoteTile({ peerId, stream, label }: { peerId: string; stream: MediaStream; label: string }) {
+    const videoRef = useVideoRef(stream);
+    return (
+        <div className="relative bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl min-h-0">
+            <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10 pointer-events-none" />
+            <p className="z-20 absolute bottom-2 left-2 md:bottom-4 md:left-4 font-medium flex items-center text-xs md:text-sm">
+                <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 shadow-lg shadow-emerald-500/50 shrink-0" />
+                {label}
+            </p>
+        </div>
+    );
+}
 
 export default VideoRoom;

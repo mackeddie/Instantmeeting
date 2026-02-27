@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import Peer from 'simple-peer';
 import { RealtimeChannel } from '@supabase/supabase-js';
 import type { Participant } from './usePresence';
@@ -14,52 +14,57 @@ export function useSignaling(
     const localStreamRef = useRef<MediaStream | null>(null);
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [mediaError, setMediaError] = useState<string | null>(null);
-    const retryCount = useRef(0);
+    // Use a ref for participants so signal listener doesn't need it as a dep
+    const participantsRef = useRef<Participant[]>(participants);
+    participantsRef.current = participants;
+    const channelRef = useRef<RealtimeChannel | null>(channel);
+    channelRef.current = channel;
+    const screenStreamRef = useRef<MediaStream | null>(screenStream ?? null);
+    screenStreamRef.current = screenStream ?? null;
 
     const getMedia = async (constraints: MediaStreamConstraints = { video: true, audio: true }) => {
         try {
             setMediaError(null);
-            console.log("Signaling: Starting media acquisition...", constraints);
-
-            const devices = await navigator.mediaDevices.enumerateDevices();
-            console.log("Signaling: Available devices:", devices.map(d => ({ kind: d.kind, label: d.label || 'HIDDEN' })));
-
-            let videoStream: MediaStream | null = null;
-            let audioStream: MediaStream | null = null;
+            console.log('Signaling: Starting media acquisition...', constraints);
 
             // Step 1: Try Combined first
             try {
                 const combined = await navigator.mediaDevices.getUserMedia(constraints);
-                console.log("Signaling: Combined media granted");
+                console.log('Signaling: Combined media granted');
                 localStreamRef.current = combined;
                 setLocalStream(combined);
                 return;
             } catch (err: any) {
-                console.warn("Signaling: Combined media failed, falling back to separate requests", err);
+                console.warn('Signaling: Combined media failed, falling back to separate requests', err);
             }
 
             // Step 2: Try Separated for better error isolation
+            let videoStream: MediaStream | null = null;
+            let audioStream: MediaStream | null = null;
+
             if (constraints.video) {
                 try {
                     videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    console.log("Signaling: Video access granted separately");
+                    console.log('Signaling: Video access granted separately');
                 } catch (vErr: any) {
-                    console.error("Signaling: Video failed", vErr);
+                    console.error('Signaling: Video failed', vErr);
                 }
             }
 
             if (constraints.audio) {
                 try {
                     audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    console.log("Signaling: Audio access granted separately");
+                    console.log('Signaling: Audio access granted separately');
                 } catch (aErr: any) {
-                    console.error("Signaling: Audio failed", aErr);
+                    console.error('Signaling: Audio failed', aErr);
                 }
             }
 
             if (!videoStream && !audioStream) {
-                setMediaError("Permission denied. Please check your browser and Windows Privacy Settings (Settings > Privacy > Camera/Microphone) and ensure 'Allow desktop apps' is ON.");
-                throw new Error("Could not acquire any media tracks.");
+                setMediaError(
+                    "Permission denied. Please check your browser and Windows Privacy Settings (Settings > Privacy > Camera/Microphone) and ensure 'Allow desktop apps' is ON."
+                );
+                throw new Error('Could not acquire any media tracks.');
             }
 
             const finalStream = new MediaStream();
@@ -69,129 +74,144 @@ export function useSignaling(
             localStreamRef.current = finalStream;
             setLocalStream(finalStream);
         } catch (err: any) {
-            console.error("Signaling: Critical media failure", err);
+            console.error('Signaling: Critical media failure', err);
         }
     };
 
+    // Acquire camera/mic once on mount
     useEffect(() => {
         getMedia();
-
         return () => {
             localStreamRef.current?.getTracks().forEach(t => t.stop());
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const retryMedia = () => {
-        retryCount.current = 0;
         getMedia();
     };
 
-    // Handle Screen Share Track replacement
-    useEffect(() => {
-        const screenTrack = screenStream?.getVideoTracks()[0];
-        const cameraTrack = localStream?.getVideoTracks()[0];
+    // ─── Helper: create a peer connection ─────────────────────────────────────
+    const createPeer = useCallback((targetId: string, initiator: boolean) => {
+        if (peersRef.current[targetId]) return; // already exists, skip
+        const ch = channelRef.current;
+        const stream = screenStreamRef.current || localStreamRef.current;
+        if (!stream || !ch) return;
 
-        Object.entries(peersRef.current).forEach(([peerId, peer]) => {
-            if (!peer.connected) return;
-
-            // Simple-peer usually puts the stream in peer.streams[0]
-            const stream = peer.streams[0];
-            if (!stream) return;
-
-            const currentTracks = stream.getVideoTracks();
-            const currentTrack = currentTracks[0];
-            const targetTrack = screenTrack || cameraTrack;
-
-            if (targetTrack && currentTrack && currentTrack !== targetTrack) {
-                console.log(`Signaling: Replacing track for peer ${peerId} from ${currentTrack.label} to ${targetTrack.label}`);
-                try {
-                    peer.replaceTrack(currentTrack, targetTrack, stream);
-                } catch (err) {
-                    console.error(`Signaling: Failed to replace track for peer ${peerId}`, err);
-                }
-            }
+        console.log(`Signaling: createPeer -> ${targetId} initiator=${initiator}`);
+        const peer = new Peer({
+            initiator,
+            trickle: false,
+            stream,
         });
-    }, [screenStream, localStream]);
 
+        peer.on('signal', (data: Peer.SignalData) => {
+            ch.send({
+                type: 'broadcast',
+                event: 'signal',
+                payload: { from: userName, to: targetId, signal: data },
+            });
+        });
+
+        peer.on('stream', (incomingStream: MediaStream) => {
+            console.log(`Signaling: Received stream from ${targetId}`);
+            setRemoteStreams(prev => ({ ...prev, [targetId]: incomingStream }));
+        });
+
+        peer.on('close', () => cleanupPeer(targetId));
+        peer.on('error', (err) => {
+            console.error(`Peer ${targetId} error:`, err);
+            cleanupPeer(targetId);
+        });
+
+        peersRef.current[targetId] = peer;
+    }, [userName]);
+
+    const cleanupPeer = useCallback((targetId: string) => {
+        if (peersRef.current[targetId]) {
+            try { peersRef.current[targetId].destroy(); } catch (_) { }
+            delete peersRef.current[targetId];
+        }
+        setRemoteStreams(prev => {
+            const next = { ...prev };
+            delete next[targetId];
+            return next;
+        });
+    }, []);
+
+    // ─── Effect 1: Register signal listener (stable — runs once per channel+stream) ─
     useEffect(() => {
         if (!channel || !userName || !localStream) return;
 
-        // Listen for signals
-        channel.on('broadcast', { event: 'signal' }, ({ payload }) => {
+        const handleSignal = ({ payload }: any) => {
             const { from, to, signal } = payload;
             if (to !== userName) return;
 
-            const peerInstance = peersRef.current[from];
-            if (peerInstance) {
-                peerInstance.signal(signal);
+            if (peersRef.current[from]) {
+                peersRef.current[from].signal(signal);
             } else {
-                // Incoming call
+                // Answering side: create non-initiator then immediately signal it
                 createPeer(from, false);
-                const newPeer = peersRef.current[from];
-                if (newPeer) newPeer.signal(signal);
+                // Give the peer a tick to be stored before signalling
+                setTimeout(() => {
+                    peersRef.current[from]?.signal(signal);
+                }, 0);
             }
-        });
+        };
 
-        // Auto-call logic: if a new participant appears and their ID is "greater" than mine, I call them.
-        // This simple tie-breaker prevents double calling.
+        channel.on('broadcast', { event: 'signal' }, handleSignal);
+
+        return () => {
+            // Tear down all peers when channel or stream changes
+            Object.values(peersRef.current).forEach(p => { try { p.destroy(); } catch (_) { } });
+            peersRef.current = {};
+            setRemoteStreams({});
+        };
+    }, [channel, userName, localStream, createPeer]);
+
+    // ─── Effect 2: Connect to newly arrived participants ───────────────────────
+    useEffect(() => {
+        if (!channel || !userName || !localStream) return;
+
         participants.forEach(p => {
             if (p.id !== userName && !peersRef.current[p.id] && p.id > userName) {
                 createPeer(p.id, true);
             }
         });
 
-        function createPeer(targetId: string, initiator: boolean) {
-            // Use screenStream as initial stream if active, otherwise local camera
-            const initialStream = screenStream || localStream;
-
-            const peer = new Peer({
-                initiator,
-                trickle: false,
-                stream: initialStream!,
-            });
-
-            peer.on('signal', (data: Peer.SignalData) => {
-                channel?.send({
-                    type: 'broadcast',
-                    event: 'signal',
-                    payload: { from: userName, to: targetId, signal: data },
-                });
-            });
-
-            peer.on('stream', (stream: MediaStream) => {
-                setRemoteStreams(prev => ({ ...prev, [targetId]: stream }));
-            });
-
-            peer.on('close', () => {
-                cleanupPeer(targetId);
-            });
-
-            peer.on('error', (err) => {
-                console.error(`Peer ${targetId} error:`, err);
-                cleanupPeer(targetId);
-            });
-
-            peersRef.current[targetId] = peer;
-            return peer;
-        }
-
-        function cleanupPeer(targetId: string) {
-            if (peersRef.current[targetId]) {
-                peersRef.current[targetId].destroy();
-                delete peersRef.current[targetId];
+        // Clean up peers for participants who have left
+        const currentIds = new Set(participants.map(p => p.id));
+        Object.keys(peersRef.current).forEach(peerId => {
+            if (!currentIds.has(peerId)) {
+                cleanupPeer(peerId);
             }
-            setRemoteStreams(prev => {
-                const next = { ...prev };
-                delete next[targetId];
-                return next;
-            });
-        }
+        });
+        // Re-run only when participant list changes — does NOT destroy existing peers
+    }, [participants, channel, userName, localStream, createPeer, cleanupPeer]);
 
-        return () => {
-            Object.values(peersRef.current).forEach(p => p.destroy());
-            peersRef.current = {};
-        };
-    }, [channel, userName, localStream, participants, screenStream]);
+    // ─── Effect 3: Screen share track replacement ──────────────────────────────
+    useEffect(() => {
+        const screenTrack = screenStream?.getVideoTracks()[0];
+        const cameraTrack = localStream?.getVideoTracks()[0];
+
+        Object.entries(peersRef.current).forEach(([peerId, peer]) => {
+            if (!peer.connected) return;
+            const peerStream = (peer as any)._remoteStreams?.[0] ?? peer.streams?.[0];
+            if (!peerStream) return;
+
+            const currentTrack = peerStream.getVideoTracks()[0];
+            const targetTrack = screenTrack || cameraTrack;
+
+            if (targetTrack && currentTrack && currentTrack !== targetTrack) {
+                console.log(`Signaling: Replacing track for peer ${peerId}`);
+                try {
+                    peer.replaceTrack(currentTrack, targetTrack, peerStream);
+                } catch (err) {
+                    console.error(`Signaling: Track replace failed for ${peerId}`, err);
+                }
+            }
+        });
+    }, [screenStream, localStream]);
 
     return { remoteStreams, localStream, mediaError, retryMedia };
 }
