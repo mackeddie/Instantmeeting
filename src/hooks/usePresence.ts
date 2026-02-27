@@ -26,6 +26,7 @@ export function usePresence(roomName: string, userName: string) {
                 presence: {
                     key: currentIdentity,
                 },
+                broadcast: { ack: true }, // Ensure reliable delivery for WebRTC offer payloads
             },
         });
 

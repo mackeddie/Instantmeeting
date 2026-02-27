@@ -101,7 +101,7 @@ export function useSignaling(
         console.log(`Signaling: createPeer -> ${targetId} initiator=${initiator}`);
         const peer = new Peer({
             initiator,
-            trickle: true, // MUST be true for reliable cross-network connections
+            trickle: false, // MUST be false for Supabase, 10 msgs/sec rate limit drops candidates if true!
             stream,
             config: {
                 iceServers: [
@@ -147,9 +147,12 @@ export function useSignaling(
         });
     }, []);
 
-    // ─── Effect 1: Register signal listener (stable — runs once per channel+stream) ─
+    // ─── Effect 1: Register signal listener (strictly ATTACH ONCE per channel) ──
+    const attachedChannelTopic = useRef<string | null>(null);
     useEffect(() => {
         if (!channel || !userName || !localStream) return;
+        if (attachedChannelTopic.current === channel.topic) return; // Prevent duplicate listeners
+        attachedChannelTopic.current = channel.topic;
 
         const handleSignal = ({ payload }: any) => {
             const { from, to, signal } = payload;
@@ -168,13 +171,8 @@ export function useSignaling(
         };
 
         channel.on('broadcast', { event: 'signal' }, handleSignal);
+        // Do NOT destroy peers here; Effect 2 handles participant departures naturally.
 
-        return () => {
-            // Tear down all peers when channel or stream changes
-            Object.values(peersRef.current).forEach(p => { try { p.destroy(); } catch (_) { } });
-            peersRef.current = {};
-            setRemoteStreams({});
-        };
     }, [channel, userName, localStream, createPeer]);
 
     // ─── Effect 2: Connect to newly arrived participants ───────────────────────
