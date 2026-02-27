@@ -65,6 +65,8 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const [blurBackground, setBlurBackground] = useState(false);
     const [sidebarVisibleOnMobile, setSidebarVisibleOnMobile] = useState(false);
     const [meetingSeconds, setMeetingSeconds] = useState(0);
+    const [pinnedId, setPinnedId] = useState<string | null>(null);
+    const [videoQuality, setVideoQuality] = useState<'high' | 'low'>('high');
 
     // Build shareable invite link
     const inviteLink = (() => {
@@ -102,6 +104,14 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const { remoteStreams, localStream } = useSignaling(channel, identity, liveParticipants, screenStream);
 
     const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([]);
+
+    useEffect(() => {
+        if (localStream) {
+            localStream.getVideoTracks().forEach(track => {
+                track.applyConstraints(videoQuality === 'low' ? { height: { ideal: 360 } } : { height: { ideal: 720 } }).catch(console.error);
+            });
+        }
+    }, [videoQuality, localStream]);
 
     const { transcript, summary } = useAI(localStream);
 
@@ -363,7 +373,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                     </div>
                                 ) : (
                                     /* ── MULTI-USER GRID ──────────────────────────────── */
-                                    <div className={`grid gap-2 md:gap-3 h-full p-2 md:p-3 auto-rows-fr ${Object.keys(remoteStreams).length === 1
+                                    <div className={`grid gap-2 md:gap-3 h-full p-2 md:p-3 auto-rows-fr ${pinnedId ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4' : Object.keys(remoteStreams).length === 1
                                         ? 'grid-cols-1 sm:grid-cols-2'
                                         : Object.keys(remoteStreams).length <= 3
                                             ? 'grid-cols-2'
@@ -371,7 +381,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                         }`}>
                                         {/* Screen share tile */}
                                         {screenStream && (
-                                            <div className="col-span-full bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" style={{ maxHeight: '55%' }}>
+                                            <div className="col-span-full bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" style={{ maxHeight: '65%', minHeight: '50%' }}>
                                                 <video ref={screenVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
                                             </div>
                                         )}
@@ -382,25 +392,30 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                                 peerId={peerId}
                                                 stream={stream}
                                                 label={liveParticipants.find(p => p.id === peerId)?.name || peerId.split(':')[0]}
+                                                isPinned={pinnedId === peerId && !screenStream}
+                                                onClick={() => setPinnedId(pinnedId === peerId ? null : peerId)}
                                             />
                                         ))}
                                         {/* Self tile — smaller corner tile */}
-                                        <motion.div className="relative bg-slate-950 rounded-2xl border-2 border-indigo-600/30 overflow-hidden shadow-2xl min-h-0">
+                                        <motion.div onClick={() => setPinnedId(pinnedId === myId ? null : myId)} className={`relative bg-slate-950 rounded-2xl border-2 border-indigo-600/30 overflow-hidden shadow-2xl cursor-pointer transition-all ${(pinnedId === myId && !screenStream) ? 'col-span-full' : 'min-h-0'}`} style={(pinnedId === myId && !screenStream) ? { maxHeight: '65%', minHeight: '50%' } : {}}>
                                             <video ref={localVideoRef} autoPlay muted playsInline className={`w-full h-full object-cover mirror ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`} />
                                             {isVideoOff && <div className="absolute inset-0 z-30 bg-slate-950 flex items-center justify-center"><VideoOff className="w-8 h-8 text-indigo-500" /></div>}
-                                            <div className="absolute bottom-2 left-2 right-2 z-20 flex items-center justify-between">
-                                                <span className="text-[10px] font-bold text-white/70">You</span>
-                                                <div className={`p-1.5 rounded-lg bg-slate-950/80 border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'}`}>
-                                                    {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                                            <div className="absolute top-2 right-2 md:top-4 md:right-4 z-20">
+                                                <div className={`p-1.5 md:p-2 rounded-lg bg-slate-950/80 backdrop-blur-md border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'}`}>
+                                                    {isMuted ? <MicOff className="w-3 h-3 md:w-4 md:h-4" /> : <Mic className="w-3 h-3 md:w-4 md:h-4" />}
                                                 </div>
                                             </div>
+                                            <p className="absolute bottom-2 left-2 md:bottom-4 md:left-4 font-medium flex items-center text-xs md:text-sm z-20">
+                                                <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2 shadow-lg shadow-emerald-500/50 shrink-0" />
+                                                You
+                                            </p>
                                         </motion.div>
                                     </div>
                                 )}
                             </motion.div>
                         ) : (
                             <motion.div key="whiteboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full h-full p-3 md:p-6">
-                                <Whiteboard />
+                                <Whiteboard channel={channel} />
                             </motion.div>
                         )}
                     </AnimatePresence>
@@ -462,7 +477,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                 </AnimatePresence>
             </main>
 
-            <footer className="shrink-0 px-3 md:px-10 flex justify-between items-center border-t border-white/5 bg-slate-950/80 backdrop-blur-2xl z-20" style={{ minHeight: '64px', paddingBottom: 'env(safe-area-inset-bottom, 8px)', paddingTop: '8px' }}>
+            <footer className="shrink-0 px-3 md:px-10 flex justify-between items-center border-t border-white/5 bg-slate-950/80 backdrop-blur-2xl z-[60] relative pointer-events-auto" style={{ minHeight: '64px', paddingBottom: 'env(safe-area-inset-bottom, 8px)', paddingTop: '8px' }}>
                 <div className="flex-1 hidden md:flex items-center space-x-4">
                     <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="w-12 h-12 rounded-2xl flex items-center justify-center bg-white/5 text-slate-400">
                         {theme === 'dark' ? <Sun className="w-5 h-5 text-yellow-500" /> : <Moon className="w-5 h-5 text-indigo-400" />}
@@ -472,18 +487,19 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                         <p className="font-mono text-lg text-purple-400">{formatDuration(meetingSeconds)}</p>
                     </div>
                 </div>
-                <div className="flex items-center justify-center gap-1.5 md:gap-3 flex-1 md:flex-none flex-wrap">
-                    <button id="btn-mute" onClick={toggleMute} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
-                    <button id="btn-video" onClick={toggleVideo} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}</button>
-                    <button id="btn-screen" onClick={toggleScreenShare} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${screenStream ? 'bg-purple-600' : 'bg-white/5'}`}><ScreenShare className="w-4 h-4" /></button>
-                    <button id="btn-record" onClick={toggleRecording} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isRecording ? 'bg-red-600' : 'bg-white/5'}`}><Radio className="w-4 h-4" /></button>
-                    <button id="btn-hand" onClick={() => { setHandRaised(!handRaised); if (channel) channel.send({ type: 'broadcast', event: 'handRaised', payload: { userId: myId, userName: myId, raised: !handRaised } }); }} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${handRaised ? 'bg-yellow-500' : 'bg-white/5'}`}><Hand className="w-4 h-4" /></button>
-                    <button id="btn-invite" onClick={() => setShowInvite(true)} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 bg-emerald-600/20 border border-emerald-500/20 text-emerald-400"><Users className="w-4 h-4" /></button>
-                    <button id="btn-chat" onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); setSidebarVisibleOnMobile(true); }} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center bg-white/5 shrink-0"><MessageSquare className="w-4 h-4" /></button>
-                    <button id="btn-end" onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-3 py-2 bg-red-600 rounded-xl text-[9px] md:text-[10px] font-black uppercase flex items-center shrink-0"><LogOut className="w-3.5 h-3.5 mr-1" /> End</button>
-                    <button id="btn-sidebar-mobile" onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-4 h-4" /></button>
+                {/* Mobile touch-manipulation explicit classes added for fast interaction */}
+                <div className="flex items-center justify-center gap-1.5 md:gap-3 flex-1 md:flex-none flex-wrap touch-manipulation">
+                    <button id="btn-mute" onClick={toggleMute} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
+                    <button id="btn-video" onClick={toggleVideo} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}</button>
+                    <button id="btn-screen" onClick={toggleScreenShare} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${screenStream ? 'bg-purple-600' : 'bg-white/5'}`}><ScreenShare className="w-4 h-4" /></button>
+                    <button id="btn-record" onClick={toggleRecording} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${isRecording ? 'bg-red-600' : 'bg-white/5'}`}><Radio className="w-4 h-4" /></button>
+                    <button id="btn-hand" onClick={() => { setHandRaised(!handRaised); if (channel) channel.send({ type: 'broadcast', event: 'handRaised', payload: { userId: myId, userName: myId, raised: !handRaised } }); }} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${handRaised ? 'bg-yellow-500' : 'bg-white/5'}`}><Hand className="w-4 h-4" /></button>
+                    <button id="btn-invite" onClick={() => setShowInvite(true)} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer bg-emerald-600/20 border border-emerald-500/20 text-emerald-400"><Users className="w-4 h-4" /></button>
+                    <button id="btn-chat" onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); setSidebarVisibleOnMobile(true); }} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 cursor-pointer bg-white/5"><MessageSquare className="w-4 h-4" /></button>
+                    <button id="btn-end" onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-3 py-2 bg-red-600 rounded-xl text-[9px] md:text-[10px] font-black uppercase flex items-center shrink-0 cursor-pointer"><LogOut className="w-3.5 h-3.5 mr-1" /> End</button>
+                    <button id="btn-sidebar-mobile" onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0 cursor-pointer ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-4 h-4" /></button>
                 </div>
-                <div className="hidden lg:block">
+                <div className="hidden lg:block touch-manipulation">
                     <button onClick={() => setShowSettings(true)} className="p-3 bg-white/5 rounded-xl"><Layout className="w-5 h-5" /></button>
                 </div>
             </footer>
@@ -499,6 +515,13 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                     <label className="text-[10px] font-bold text-slate-500 uppercase">Camera</label>
                                     <select className="w-full bg-slate-800 rounded-xl p-3 text-xs" value={selectedCamera} onChange={(e) => setSelectedCamera(e.target.value)}>
                                         {availableCameras.map(d => <option key={d.deviceId} value={d.deviceId}>{d.label}</option>)}
+                                    </select>
+                                </section>
+                                <section className="space-y-2">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase">Video Resolution (Quality)</label>
+                                    <select className="w-full bg-slate-800 rounded-xl p-3 text-xs" value={videoQuality} onChange={(e) => setVideoQuality(e.target.value as any)}>
+                                        <option value="high">High Definition (720p)</option>
+                                        <option value="low">Data Saver (360p)</option>
                                     </select>
                                 </section>
                                 <button onClick={() => setBlurBackground(!blurBackground)} className={`w-full p-4 rounded-xl border flex justify-between items-center ${blurBackground ? 'border-indigo-600 bg-indigo-600/10' : 'border-white/5'}`}>
@@ -541,10 +564,10 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
 };
 
 /** Stable remote video tile — uses its own useVideoRef so srcObject never flickers */
-function RemoteTile({ peerId, stream, label }: { peerId: string; stream: MediaStream; label: string }) {
+function RemoteTile({ peerId, stream, label, isPinned, onClick }: { peerId: string; stream: MediaStream; label: string, isPinned?: boolean, onClick?: () => void }) {
     const videoRef = useVideoRef(stream);
     return (
-        <div className="relative bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl min-h-0">
+        <div onClick={onClick} className={`relative bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl transition-all cursor-pointer ${isPinned ? 'col-span-full' : 'min-h-0'}`} style={isPinned ? { maxHeight: '65%', minHeight: '50%' } : {}}>
             <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent z-10 pointer-events-none" />
             <p className="z-20 absolute bottom-2 left-2 md:bottom-4 md:left-4 font-medium flex items-center text-xs md:text-sm">

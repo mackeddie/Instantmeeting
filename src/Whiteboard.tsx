@@ -1,11 +1,19 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Pencil, Eraser, Download, Trash2, Undo } from 'lucide-react';
+import { RealtimeChannel } from '@supabase/supabase-js';
 
-const Whiteboard: React.FC = () => {
+interface WhiteboardProps {
+    channel: RealtimeChannel | null;
+}
+
+const Whiteboard: React.FC<WhiteboardProps> = ({ channel }) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
     const [color, setColor] = useState('#8b5cf6');
     const [mode, setMode] = useState<'pencil' | 'eraser'>('pencil');
+
+    // Ref to hold the current canvas context and drawing position for remote sync
+    const lastPos = useRef<{ x: number, y: number } | null>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -29,23 +37,48 @@ const Whiteboard: React.FC = () => {
         return () => window.removeEventListener('resize', resizeCanvas);
     }, []);
 
+    // Listen for remote drawing broadcasts
+    useEffect(() => {
+        if (!channel) return;
+        const handleDraw = ({ payload }: any) => {
+            const canvas = canvasRef.current;
+            const ctx = canvas?.getContext('2d');
+            if (!canvas || !ctx) return;
+
+            if (payload.event === 'clear') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+
+            const { x0, y0, x1, y1, color: strokeColor, mode: strokeMode } = payload;
+            ctx.beginPath();
+            ctx.strokeStyle = strokeMode === 'eraser' ? '#0f172a' : strokeColor;
+            ctx.lineWidth = strokeMode === 'eraser' ? 20 : 3;
+            // Scale percentages back to active resolution
+            ctx.moveTo(x0 * canvas.width, y0 * canvas.height);
+            ctx.lineTo(x1 * canvas.width, y1 * canvas.height);
+            ctx.stroke();
+        };
+
+        channel.on('broadcast', { event: 'wb_draw' }, handleDraw);
+        // We do not cleanup the listener explicitly to avoid unbinding existing listeners for the room
+    }, [channel]);
+
     const startDrawing = (e: React.MouseEvent | React.TouchEvent) => {
         setIsDrawing(true);
-        draw(e);
+        const { x, y } = getCoords(e);
+        lastPos.current = { x, y };
     };
 
     const stopDrawing = () => {
-        const ctx = canvasRef.current?.getContext('2d');
-        ctx?.beginPath();
         setIsDrawing(false);
+        lastPos.current = null;
     };
 
-    const draw = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDrawing) return;
+    const getCoords = (e: React.MouseEvent | React.TouchEvent) => {
         const canvas = canvasRef.current;
-        const ctx = canvas?.getContext('2d');
-        if (!canvas || !ctx) return;
-
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
         let clientX, clientY;
         if ('touches' in e) {
             clientX = e.touches[0].clientX;
@@ -54,18 +87,46 @@ const Whiteboard: React.FC = () => {
             clientX = e.clientX;
             clientY = e.clientY;
         }
+        return {
+            x: clientX - rect.left,
+            y: clientY - rect.top
+        };
+    };
 
-        const rect = canvas.getBoundingClientRect();
-        const x = clientX - rect.left;
-        const y = clientY - rect.top;
+    const draw = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        if (!canvas || !ctx || !lastPos.current) return;
+
+        const { x, y } = getCoords(e);
 
         ctx.strokeStyle = mode === 'eraser' ? '#0f172a' : color;
         ctx.lineWidth = mode === 'eraser' ? 20 : 3;
 
+        ctx.beginPath();
+        ctx.moveTo(lastPos.current.x, lastPos.current.y);
         ctx.lineTo(x, y);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(x, y);
+
+        if (channel) {
+            // Broadcast as percentage of canvas to handle different screen sizes remotely
+            channel.send({
+                type: 'broadcast',
+                event: 'wb_draw',
+                payload: {
+                    event: 'draw',
+                    x0: lastPos.current.x / canvas.width,
+                    y0: lastPos.current.y / canvas.height,
+                    x1: x / canvas.width,
+                    y1: y / canvas.height,
+                    color,
+                    mode
+                }
+            });
+        }
+
+        lastPos.current = { x, y };
     };
 
     const clearCanvas = () => {
@@ -73,6 +134,9 @@ const Whiteboard: React.FC = () => {
         const ctx = canvas?.getContext('2d');
         if (canvas && ctx) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (channel) {
+                channel.send({ type: 'broadcast', event: 'wb_draw', payload: { event: 'clear' } });
+            }
         }
     };
 
