@@ -57,6 +57,7 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const [messages, setMessages] = useState<{ user: string, text: string, time: string }[]>([]);
     const [newMessage, setNewMessage] = useState("");
     const [showSettings, setShowSettings] = useState(false);
+    const [showInvite, setShowInvite] = useState(false);
     const [selectedCamera, setSelectedCamera] = useState("");
     const [isLocked, setIsLocked] = useState(!!passcode);
     const [inputPasscode, setInputPasscode] = useState("");
@@ -64,6 +65,22 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const [blurBackground, setBlurBackground] = useState(false);
     const [sidebarVisibleOnMobile, setSidebarVisibleOnMobile] = useState(false);
     const [meetingSeconds, setMeetingSeconds] = useState(0);
+
+    // Build shareable invite link
+    const inviteLink = (() => {
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('room', roomName);
+            return url.toString();
+        } catch { return window.location.href; }
+    })();
+
+    const copyInviteLink = () => {
+        navigator.clipboard.writeText(inviteLink).then(() => {
+            setToast('Invite link copied!');
+            setTimeout(() => setToast(null), 3000);
+        });
+    };
 
     useEffect(() => {
         const interval = setInterval(() => setMeetingSeconds(s => s + 1), 1000);
@@ -92,6 +109,15 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
     const localVideoRef = useVideoRef(localStream);
     const screenVideoRef = useVideoRef(screenStream);
 
+    // Toggle mic track enabled state (camera LED turns off properly)
+    const toggleMute = () => {
+        localStream?.getAudioTracks().forEach(t => { t.enabled = isMuted; }); // flip: if muted, re-enable
+        setIsMuted(m => !m);
+    };
+    const toggleVideo = () => {
+        localStream?.getVideoTracks().forEach(t => { t.enabled = isVideoOff; }); // flip: if off, re-enable
+        setIsVideoOff(v => !v);
+    };
     const toggleScreenShare = async () => {
         if (!screenStream) {
             try {
@@ -256,19 +282,28 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                 )}
             </AnimatePresence>
 
-            <header className="h-14 md:h-16 px-4 md:px-6 flex justify-between items-center border-b border-white/5 bg-slate-900/50 backdrop-blur-md z-10">
+            <header className="shrink-0 h-14 md:h-16 px-4 md:px-6 flex justify-between items-center border-b border-white/5 bg-slate-900/50 backdrop-blur-md z-10">
                 <div className="flex items-center space-x-2 md:space-x-4">
-                    <span className="hidden sm:inline text-white font-black text-sm tracking-tight uppercase italic mr-4">{roomName}</span>
                     <div className="flex items-center space-x-2">
                         <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
                             <Sparkles className="w-5 h-5 text-white" />
                         </div>
-                        <span className="font-black text-lg tracking-tight hidden md:inline">InstantMeet</span>
+                        <span className="font-black text-base tracking-tight hidden sm:inline">InstantMeet</span>
                     </div>
+                    <div className="h-5 w-px bg-white/10 hidden sm:block" />
+                    <span className="text-indigo-400 font-bold text-sm truncate max-w-[120px] md:max-w-xs">{roomName}</span>
                 </div>
-                <div className="flex items-center space-x-3">
-                    <button onClick={() => setActiveView('video')} className={`px-4 py-2 rounded-xl border transition-all text-[10px] font-black uppercase tracking-widest ${activeView === 'video' ? 'bg-indigo-600 border-transparent text-white shadow-lg shadow-indigo-500/20' : 'bg-white/5 border-white/5 text-slate-400'}`}>Video</button>
-                    <button onClick={() => setActiveView('whiteboard')} className={`px-4 py-2 rounded-xl border transition-all text-[10px] font-black uppercase tracking-widest ${activeView === 'whiteboard' ? 'bg-indigo-600 border-transparent text-white shadow-lg shadow-indigo-500/20' : 'bg-white/5 border-white/5 text-slate-400'}`}>Board</button>
+                <div className="flex items-center gap-2 md:gap-3">
+                    {/* Invite / Share link button */}
+                    <button
+                        onClick={() => setShowInvite(true)}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/30 transition-all text-[10px] font-black uppercase tracking-widest"
+                    >
+                        <Users className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Invite</span>
+                    </button>
+                    <button onClick={() => setActiveView('video')} className={`px-3 py-2 rounded-xl border transition-all text-[10px] font-black uppercase tracking-widest ${activeView === 'video' ? 'bg-indigo-600 border-transparent text-white' : 'bg-white/5 border-white/5 text-slate-400'}`}>Video</button>
+                    <button onClick={() => setActiveView('whiteboard')} className={`px-3 py-2 rounded-xl border transition-all text-[10px] font-black uppercase tracking-widest ${activeView === 'whiteboard' ? 'bg-indigo-600 border-transparent text-white' : 'bg-white/5 border-white/5 text-slate-400'}`}>Board</button>
                 </div>
             </header>
 
@@ -278,58 +313,90 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                         {activeView === 'video' ? (
                             <motion.div
                                 key="video"
-                                initial={{ opacity: 0, scale: 0.95 }}
+                                initial={{ opacity: 0, scale: 0.98 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                className={`grid gap-2 md:gap-4 h-full p-2 md:p-4 auto-rows-fr ${Object.keys(remoteStreams).length === 0
-                                    ? 'grid-cols-1'
-                                    : Object.keys(remoteStreams).length === 1
+                                exit={{ opacity: 0, scale: 0.98 }}
+                                className="h-full w-full"
+                            >
+                                {/* ── SOLO / WAITING STATE ────────────────────────────── */}
+                                {Object.keys(remoteStreams).length === 0 && !screenStream ? (
+                                    <div className="h-full flex flex-col md:flex-row gap-3 p-3 md:p-4">
+                                        {/* Self video — left column */}
+                                        <div className="relative flex-1 bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl min-h-0">
+                                            <video ref={localVideoRef} autoPlay muted playsInline className={`w-full h-full object-cover mirror ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`} />
+                                            {isVideoOff && <div className="absolute inset-0 bg-slate-950 flex items-center justify-center z-10"><VideoOff className="w-10 h-10 text-indigo-400" /></div>}
+                                            <div className="absolute bottom-3 left-3 flex items-center gap-2 z-20">
+                                                <span className="px-2 py-1 bg-slate-950/80 rounded-lg text-[10px] font-bold text-white">{userName} (You)</span>
+                                                {isMuted && <span className="px-2 py-1 bg-red-600/80 rounded-lg text-[10px] font-bold text-white">Muted</span>}
+                                            </div>
+                                        </div>
+                                        {/* Waiting panel — right column */}
+                                        <div className="w-full md:w-72 lg:w-80 flex flex-col gap-3 shrink-0">
+                                            {/* Invite card */}
+                                            <div className="flex-1 bg-slate-900/60 border border-white/5 rounded-2xl p-5 flex flex-col items-center justify-center text-center gap-4">
+                                                <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center">
+                                                    <Users className="w-7 h-7 text-indigo-400" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-white font-black text-base">Waiting for others</p>
+                                                    <p className="text-slate-500 text-xs mt-1">Share the link below to invite participants</p>
+                                                </div>
+                                                <div className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 flex items-center gap-2">
+                                                    <span className="flex-1 text-indigo-400 text-[10px] font-mono truncate">{inviteLink}</span>
+                                                    <button onClick={copyInviteLink} className="shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[10px] font-black text-white transition-all">Copy</button>
+                                                </div>
+                                            </div>
+                                            {/* Participants list */}
+                                            <div className="bg-slate-900/60 border border-white/5 rounded-2xl p-4">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-600 mb-3">In Room ({liveParticipants.length})</p>
+                                                <div className="space-y-2">
+                                                    {liveParticipants.map(p => (
+                                                        <div key={p.id} className="flex items-center gap-2">
+                                                            <span className="w-2 h-2 bg-emerald-500 rounded-full" />
+                                                            <span className="text-xs text-white font-medium">{p.name || p.id.split(':')[0]}</span>
+                                                            {p.isHost && <span className="text-[9px] text-indigo-400 font-black">HOST</span>}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* ── MULTI-USER GRID ──────────────────────────────── */
+                                    <div className={`grid gap-2 md:gap-3 h-full p-2 md:p-3 auto-rows-fr ${Object.keys(remoteStreams).length === 1
                                         ? 'grid-cols-1 sm:grid-cols-2'
                                         : Object.keys(remoteStreams).length <= 3
                                             ? 'grid-cols-2'
                                             : 'grid-cols-2 lg:grid-cols-3'
-                                    }`}
-                            >
-                                {/* Screen share tile — spans full width when active */}
-                                {screenStream && (
-                                    <div className="col-span-full bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" style={{ maxHeight: '55%' }}>
-                                        <video ref={screenVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
+                                        }`}>
+                                        {/* Screen share tile */}
+                                        {screenStream && (
+                                            <div className="col-span-full bg-slate-900 rounded-2xl border border-white/5 overflow-hidden shadow-2xl" style={{ maxHeight: '55%' }}>
+                                                <video ref={screenVideoRef} autoPlay playsInline className="w-full h-full object-contain" />
+                                            </div>
+                                        )}
+                                        {/* Remote tiles */}
+                                        {Object.entries(remoteStreams).map(([peerId, stream]) => (
+                                            <RemoteTile
+                                                key={peerId}
+                                                peerId={peerId}
+                                                stream={stream}
+                                                label={liveParticipants.find(p => p.id === peerId)?.name || peerId.split(':')[0]}
+                                            />
+                                        ))}
+                                        {/* Self tile — smaller corner tile */}
+                                        <motion.div className="relative bg-slate-950 rounded-2xl border-2 border-indigo-600/30 overflow-hidden shadow-2xl min-h-0">
+                                            <video ref={localVideoRef} autoPlay muted playsInline className={`w-full h-full object-cover mirror ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`} />
+                                            {isVideoOff && <div className="absolute inset-0 z-30 bg-slate-950 flex items-center justify-center"><VideoOff className="w-8 h-8 text-indigo-500" /></div>}
+                                            <div className="absolute bottom-2 left-2 right-2 z-20 flex items-center justify-between">
+                                                <span className="text-[10px] font-bold text-white/70">You</span>
+                                                <div className={`p-1.5 rounded-lg bg-slate-950/80 border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'}`}>
+                                                    {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                                                </div>
+                                            </div>
+                                        </motion.div>
                                     </div>
                                 )}
-
-                                {/* Remote participant tiles */}
-                                {Object.entries(remoteStreams).map(([peerId, stream]) => (
-                                    <RemoteTile
-                                        key={peerId}
-                                        peerId={peerId}
-                                        stream={stream}
-                                        label={liveParticipants.find(p => p.id === peerId)?.name || peerId.split(':')[0]}
-                                    />
-                                ))}
-
-                                {/* Local self tile */}
-                                <motion.div className={`relative bg-slate-950 rounded-2xl border-2 border-indigo-600/30 overflow-hidden shadow-2xl ${Object.keys(remoteStreams).length === 0 && !screenStream ? 'col-span-full max-w-2xl w-full mx-auto' : ''
-                                    }`}>
-                                    <video
-                                        ref={localVideoRef}
-                                        autoPlay
-                                        muted
-                                        playsInline
-                                        className={`w-full h-full object-cover mirror transition-all duration-700 ${blurBackground ? 'blur-2xl scale-110 opacity-60' : ''}`}
-                                    />
-                                    {isVideoOff && (
-                                        <div className="absolute inset-0 z-30 bg-slate-950 flex flex-col items-center justify-center">
-                                            <VideoOff className="w-10 h-10 text-indigo-500" />
-                                        </div>
-                                    )}
-                                    <div className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-20">
-                                        <div className={`p-1.5 md:p-2 rounded-lg bg-slate-950/80 backdrop-blur-md border ${isMuted ? 'border-red-500/50 text-red-500' : 'border-indigo-500/50 text-indigo-500'
-                                            }`}>
-                                            {isMuted ? <MicOff className="w-3 h-3 md:w-4 md:h-4" /> : <Mic className="w-3 h-3 md:w-4 md:h-4" />}
-                                        </div>
-                                    </div>
-                                    <p className="absolute bottom-2 left-2 md:bottom-4 md:left-4 text-[10px] md:text-xs font-bold text-white/70 z-20">You</p>
-                                </motion.div>
                             </motion.div>
                         ) : (
                             <motion.div key="whiteboard" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="w-full h-full p-3 md:p-6">
@@ -406,15 +473,15 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                     </div>
                 </div>
                 <div className="flex items-center justify-center gap-1.5 md:gap-3 flex-1 md:flex-none flex-wrap">
-                    <button id="btn-mute" onClick={() => setIsMuted(!isMuted)} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
-                    <button id="btn-video" onClick={() => setIsVideoOff(!isVideoOff)} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}</button>
+                    <button id="btn-mute" onClick={toggleMute} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isMuted ? 'bg-red-600' : 'bg-white/5'}`}>{isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}</button>
+                    <button id="btn-video" onClick={toggleVideo} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isVideoOff ? 'bg-red-600' : 'bg-white/5'}`}>{isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}</button>
                     <button id="btn-screen" onClick={toggleScreenShare} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${screenStream ? 'bg-purple-600' : 'bg-white/5'}`}><ScreenShare className="w-4 h-4" /></button>
                     <button id="btn-record" onClick={toggleRecording} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${isRecording ? 'bg-red-600' : 'bg-white/5'}`}><Radio className="w-4 h-4" /></button>
                     <button id="btn-hand" onClick={() => { setHandRaised(!handRaised); if (channel) channel.send({ type: 'broadcast', event: 'handRaised', payload: { userId: myId, userName: myId, raised: !handRaised } }); }} className={`w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 ${handRaised ? 'bg-yellow-500' : 'bg-white/5'}`}><Hand className="w-4 h-4" /></button>
-                    <button id="btn-chat" onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); }} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center bg-white/5 shrink-0"><MessageSquare className="w-4 h-4" /></button>
-                    <button id="btn-ai" onClick={() => setShowAI(!showAI)} className={`hidden md:flex w-9 h-9 md:w-11 md:h-11 rounded-xl items-center justify-center shrink-0 ${showAI ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-4 h-4" /></button>
-                    <button id="btn-end" onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-3 py-2 bg-red-600 rounded-xl text-[9px] md:text-[10px] font-black uppercase flex items-center shrink-0"><LogOut className="w-3.5 h-3.5 mr-1 md:mr-2" /><span className="hidden xs:inline">End</span></button>
-                    <button id="btn-sidebar-mobile" onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Users className="w-4 h-4" /></button>
+                    <button id="btn-invite" onClick={() => setShowInvite(true)} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center shrink-0 bg-emerald-600/20 border border-emerald-500/20 text-emerald-400"><Users className="w-4 h-4" /></button>
+                    <button id="btn-chat" onClick={() => { if (!showAI) setShowAI(true); setSidebarTab('chat'); setSidebarVisibleOnMobile(true); }} className="w-9 h-9 md:w-11 md:h-11 rounded-xl flex items-center justify-center bg-white/5 shrink-0"><MessageSquare className="w-4 h-4" /></button>
+                    <button id="btn-end" onClick={() => onExit(summary, transcript.map(t => t.text).join(" "))} className="px-3 py-2 bg-red-600 rounded-xl text-[9px] md:text-[10px] font-black uppercase flex items-center shrink-0"><LogOut className="w-3.5 h-3.5 mr-1" /> End</button>
+                    <button id="btn-sidebar-mobile" onClick={() => setSidebarVisibleOnMobile(!sidebarVisibleOnMobile)} className={`md:hidden w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${sidebarVisibleOnMobile ? 'bg-indigo-600' : 'bg-white/5'}`}><Sparkles className="w-4 h-4" /></button>
                 </div>
                 <div className="hidden lg:block">
                     <button onClick={() => setShowSettings(true)} className="p-3 bg-white/5 rounded-xl"><Layout className="w-5 h-5" /></button>
@@ -440,6 +507,31 @@ const VideoRoom: React.FC<VideoRoomProps> = ({ roomName, userName, passcode, onE
                                 </button>
                             </div>
                             <button onClick={() => setShowSettings(false)} className="w-full py-4 bg-white text-slate-950 rounded-xl font-black text-xs uppercase">Close</button>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Invite Modal Overlay */}
+            <AnimatePresence>
+                {showInvite && (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-center p-6">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowInvite(false)} className="absolute inset-0 bg-slate-950/80 backdrop-blur-md" />
+                        <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.9, y: 20 }} className="relative w-full max-w-sm bg-slate-900 rounded-[2.5rem] border border-white/10 p-8 shadow-2xl flex flex-col items-center text-center">
+                            <div className="w-16 h-16 rounded-3xl bg-emerald-600/10 border border-emerald-500/20 flex items-center justify-center mb-6">
+                                <Users className="w-8 h-8 text-emerald-500" />
+                            </div>
+                            <h3 className="text-2xl font-black text-white mb-2">Invite Others</h3>
+                            <p className="text-slate-400 text-sm mb-8 font-medium">Share this link with anyone you want to join the meeting.</p>
+
+                            <div className="w-full bg-slate-950/50 border border-white/5 rounded-2xl p-4 flex items-center gap-3 mb-8">
+                                <span className="flex-1 text-emerald-400 text-xs font-mono truncate text-left">{inviteLink}</span>
+                            </div>
+
+                            <div className="w-full flex gap-3">
+                                <button onClick={() => setShowInvite(false)} className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all">Close</button>
+                                <button onClick={() => { copyInviteLink(); setShowInvite(false); }} className="flex-1 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg shadow-emerald-600/20">Copy Link</button>
+                            </div>
                         </motion.div>
                     </div>
                 )}

@@ -101,8 +101,16 @@ export function useSignaling(
         console.log(`Signaling: createPeer -> ${targetId} initiator=${initiator}`);
         const peer = new Peer({
             initiator,
-            trickle: false,
+            trickle: true, // MUST be true for reliable cross-network connections
             stream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun.cloudflare.com:3478' },
+                    { urls: 'stun:stun.relay.metered.ca:80' },
+                ]
+            }
         });
 
         peer.on('signal', (data: Peer.SignalData) => {

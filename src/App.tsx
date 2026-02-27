@@ -56,6 +56,10 @@ function App() {
   const handleCreateRoom = (e: React.FormEvent) => {
     e.preventDefault();
     if (roomName.trim()) {
+      // Push room name into URL so users can share it
+      const url = new URL(window.location.href);
+      url.searchParams.set('room', roomName.trim());
+      window.history.pushState({}, '', url.toString());
       setStep('lobby');
     }
   };
